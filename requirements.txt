@@ -1,0 +1,18 @@
+# CHATSGI / TERMINAL — Section 9 · rev 2.0
+#
+# The backend (start.py) is intentionally implemented using the Python ≥ 3.10
+# standard library only — no third-party packages are required to run it.
+#
+# Stdlib modules used (NOT installable from PyPI — they ship with CPython):
+#   argparse, json, os, queue, secrets, shutil, signal, socket, subprocess,
+#   sys, threading, time, traceback, urllib (request/parse/error),
+#   http.server, socketserver, pathlib
+#
+# To run:
+#     python start.py
+#
+# Verify Python version (3.10 or newer):
+#     python -V
+#
+# If a future feature ever needs a real PyPI package, list it below with a
+# pinned version. Do NOT add fake or hallucinated package names here.
