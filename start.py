@@ -40,7 +40,9 @@ SETTINGS_PATH = ROOT / "settings.json"
 TOOLS_PATH = ROOT / "tools.json"
 INDEX_PATH = ROOT / "index.html"
 CONV_PATH = ROOT / "conversation.json"   # legacy — migrated on boot
-CHATS_PATH = ROOT / "chats.json"
+CHATS_PATH = ROOT / "chats.json"         # legacy bundle — migrated to data/
+DATA_DIR = ROOT / "data"                 # per-chat session files
+INDEX_FILE = DATA_DIR / "index.json"     # chat index (id/name/created/updated)
 
 DEFAULT_SETTINGS = {
     "endpoint": "http://localhost:8080/v1",
@@ -75,6 +77,9 @@ DEFAULT_SETTINGS = {
     "presencePenalty": 0.0,
     "stopSequences": "",
     "seed": 0,
+    "mcpEnabled": {},        # {serverName: bool} — when false the server's tools are hidden
+    "leftCollapsed": False,
+    "rightCollapsed": False,
 }
 
 # ─────────────────────────── MCP Client ──────────────────────────
@@ -235,9 +240,15 @@ class MCPManager:
                 c.stop()
             self.clients = {}
             servers = (config or {}).get("mcpServers", {}) or {}
+            # honor per-server `enabled` flag (defaults to True if unset)
+            enabled_overrides = (load_settings() or {}).get("mcpEnabled", {}) or {}
             for name, cfg in servers.items():
                 if not isinstance(cfg, dict) or not cfg.get("command"):
                     continue
+                # config-level disable wins; otherwise settings override
+                enabled = cfg.get("enabled", True)
+                if name in enabled_overrides:
+                    enabled = bool(enabled_overrides[name])
                 client = MCPClient(
                     name=name,
                     command=cfg.get("command"),
@@ -245,8 +256,12 @@ class MCPManager:
                     env=cfg.get("env"),
                     cwd=cfg.get("cwd"),
                 )
+                client.enabled = enabled
                 self.clients[name] = client
             for client in list(self.clients.values()):
+                if not getattr(client, "enabled", True):
+                    client.status = "disabled"
+                    continue
                 threading.Thread(target=self._start_then_publish,
                                  args=(client,),
                                  name=f"mcp-start-{client.name}", daemon=True).start()
@@ -265,6 +280,8 @@ class MCPManager:
         with self._lock:
             clients = list(self.clients.values())
         for c in clients:
+            if not getattr(c, "enabled", True):
+                continue
             for t in c.tools:
                 tname = t.get("name", "")
                 full = f"{c.name}__{tname}"
@@ -286,6 +303,7 @@ class MCPManager:
         return [{
             "name": c.name,
             "status": c.status,
+            "enabled": bool(getattr(c, "enabled", True)),
             "tool_count": len(c.tools),
             "command": c.command,
             "args": c.args,
@@ -309,6 +327,8 @@ class MCPManager:
                     break
             if client is None:
                 raise ValueError(f"no MCP server exposes tool '{full_name}'")
+        if not getattr(client, "enabled", True):
+            raise RuntimeError(f"server '{client.name}' is disabled")
         if client.status != "online":
             raise RuntimeError(f"server '{client.name}' not online (status={client.status})")
         return client.call_tool(tool, arguments)
@@ -384,61 +404,210 @@ def save_tools_config(c: dict) -> None:
 def _new_id() -> str:
     return secrets.token_hex(8)
 
-def _default_chats() -> dict:
-    cid = _new_id()
+def _safe_id(cid: str) -> bool:
+    return isinstance(cid, str) and bool(cid) and all(ch in "0123456789abcdefABCDEF-_" for ch in cid)
+
+def _chat_file(cid: str) -> Path:
+    return DATA_DIR / f"{cid}.json"
+
+def _write_chat_file(chat: dict) -> None:
+    DATA_DIR.mkdir(exist_ok=True)
+    cid = chat.get("id")
+    if not _safe_id(cid):
+        raise ValueError(f"refusing to write chat with unsafe id: {cid!r}")
+    tmp = _chat_file(cid).with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(chat, indent=2, ensure_ascii=False), "utf-8")
+    tmp.replace(_chat_file(cid))
+
+def _read_chat_file(cid: str) -> dict | None:
+    if not _safe_id(cid):
+        return None
+    p = _chat_file(cid)
+    if not p.exists():
+        return None
+    try:
+        return json.loads(p.read_text("utf-8"))
+    except Exception:
+        return None
+
+def _read_index_file() -> dict:
+    if INDEX_FILE.exists():
+        try:
+            v = json.loads(INDEX_FILE.read_text("utf-8"))
+            if isinstance(v, dict) and isinstance(v.get("chats"), list):
+                return v
+        except Exception:
+            pass
+    return {"active": None, "chats": []}
+
+def _write_index_file(idx: dict) -> None:
+    DATA_DIR.mkdir(exist_ok=True)
+    tmp = INDEX_FILE.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(idx, indent=2, ensure_ascii=False), "utf-8")
+    tmp.replace(INDEX_FILE)
+
+def _index_entry(chat: dict) -> dict:
     return {
-        "active": cid,
-        "chats": [{
-            "id": cid,
-            "name": "Session 01",
-            "created": int(time.time() * 1000),
-            "updated": int(time.time() * 1000),
-            "messages": [],
-        }],
+        "id": chat.get("id"),
+        "name": chat.get("name") or "Untitled",
+        "created": chat.get("created"),
+        "updated": chat.get("updated"),
+        "size": len(chat.get("messages") or []),
     }
 
-def load_chats() -> dict:
+def _migrate_legacy() -> None:
+    """Migrate chats.json bundle (and earlier conversation.json) → data/*.json."""
+    DATA_DIR.mkdir(exist_ok=True)
+    if INDEX_FILE.exists():
+        return  # already migrated
+    legacy = None
+    if CHATS_PATH.exists():
+        try:
+            legacy = json.loads(CHATS_PATH.read_text("utf-8"))
+        except Exception:
+            legacy = None
+    if (not legacy or not legacy.get("chats")) and CONV_PATH.exists():
+        try:
+            msgs = json.loads(CONV_PATH.read_text("utf-8"))
+            if isinstance(msgs, list):
+                cid = _new_id()
+                legacy = {
+                    "active": cid,
+                    "chats": [{
+                        "id": cid,
+                        "name": "Imported Session",
+                        "created": int(time.time() * 1000),
+                        "updated": int(time.time() * 1000),
+                        "messages": msgs,
+                    }],
+                }
+        except Exception:
+            pass
+    if not legacy or not legacy.get("chats"):
+        return
+    index = {"active": legacy.get("active"), "chats": []}
+    for chat in legacy["chats"]:
+        if not chat.get("id"):
+            chat["id"] = _new_id()
+        try:
+            _write_chat_file(chat)
+            index["chats"].append(_index_entry(chat))
+        except Exception:
+            continue
+    _write_index_file(index)
+
+def _default_chats() -> dict:
+    cid = _new_id()
+    chat = {
+        "id": cid,
+        "name": "Session 01",
+        "created": int(time.time() * 1000),
+        "updated": int(time.time() * 1000),
+        "messages": [],
+    }
+    _write_chat_file(chat)
+    idx = {"active": cid, "chats": [_index_entry(chat)]}
+    _write_index_file(idx)
+    return idx
+
+def load_chats_index() -> dict:
+    """Returns {active, chats:[{id,name,created,updated,size}]}."""
     with _PERSIST_LOCK:
-        if CHATS_PATH.exists():
-            try:
-                v = json.loads(CHATS_PATH.read_text("utf-8"))
-                if isinstance(v, dict) and isinstance(v.get("chats"), list) and v["chats"]:
-                    return v
-            except Exception:
-                pass
-        # legacy migration
-        if CONV_PATH.exists():
-            try:
-                msgs = json.loads(CONV_PATH.read_text("utf-8"))
-                if isinstance(msgs, list):
-                    cid = _new_id()
-                    blob = {
-                        "active": cid,
-                        "chats": [{
-                            "id": cid,
-                            "name": "Imported Session",
-                            "created": int(time.time() * 1000),
-                            "updated": int(time.time() * 1000),
-                            "messages": msgs,
-                        }],
-                    }
-                    CHATS_PATH.write_text(json.dumps(blob, indent=2), "utf-8")
-                    return blob
-            except Exception:
-                pass
-        blob = _default_chats()
-        CHATS_PATH.write_text(json.dumps(blob, indent=2), "utf-8")
-        return blob
+        _migrate_legacy()
+        idx = _read_index_file()
+        if not idx.get("chats"):
+            return _default_chats()
+        return idx
+
+def load_chats() -> dict:
+    """Legacy-compatible: returns {active, chats:[full chat with messages]}."""
+    with _PERSIST_LOCK:
+        idx = load_chats_index()
+        chats = []
+        for entry in idx.get("chats", []):
+            chat = _read_chat_file(entry.get("id"))
+            if chat is None:
+                chat = {**entry, "messages": []}
+            chats.append(chat)
+        return {"active": idx.get("active"), "chats": chats}
 
 def save_chats(blob: dict) -> None:
+    """Persist a full {active, chats:[...]} blob — writes each chat file + index."""
     with _PERSIST_LOCK:
-        CHATS_PATH.write_text(json.dumps(blob, indent=2), "utf-8")
+        chats = blob.get("chats") or []
+        idx = {"active": blob.get("active"), "chats": []}
+        for chat in chats:
+            if not chat.get("id"):
+                chat["id"] = _new_id()
+            try:
+                _write_chat_file(chat)
+                idx["chats"].append(_index_entry(chat))
+            except Exception:
+                continue
+        # delete files for chats no longer in the index
+        keep_ids = {c["id"] for c in idx["chats"]}
+        if DATA_DIR.exists():
+            for p in DATA_DIR.glob("*.json"):
+                if p.name == "index.json":
+                    continue
+                if p.stem not in keep_ids:
+                    try: p.unlink()
+                    except Exception: pass
+        _write_index_file(idx)
 
 def get_chat(blob: dict, cid: str) -> dict | None:
     for c in blob.get("chats", []):
         if c.get("id") == cid:
             return c
     return None
+
+def load_one_chat(cid: str) -> dict | None:
+    with _PERSIST_LOCK:
+        return _read_chat_file(cid)
+
+def save_one_chat(chat: dict) -> None:
+    with _PERSIST_LOCK:
+        _write_chat_file(chat)
+        idx = _read_index_file()
+        entry = _index_entry(chat)
+        found = False
+        for i, e in enumerate(idx.get("chats", [])):
+            if e.get("id") == chat.get("id"):
+                idx["chats"][i] = entry
+                found = True
+                break
+        if not found:
+            idx.setdefault("chats", []).insert(0, entry)
+        _write_index_file(idx)
+
+def delete_one_chat(cid: str) -> bool:
+    with _PERSIST_LOCK:
+        idx = _read_index_file()
+        before = len(idx.get("chats", []))
+        idx["chats"] = [c for c in idx.get("chats", []) if c.get("id") != cid]
+        if len(idx["chats"]) == before:
+            return False
+        p = _chat_file(cid)
+        if p.exists():
+            try: p.unlink()
+            except Exception: pass
+        if not idx["chats"]:
+            _write_index_file(idx)
+            _default_chats()
+        else:
+            if idx.get("active") == cid:
+                idx["active"] = idx["chats"][0]["id"]
+            _write_index_file(idx)
+        return True
+
+def set_active_chat(cid: str) -> bool:
+    with _PERSIST_LOCK:
+        idx = _read_index_file()
+        if not any(c.get("id") == cid for c in idx.get("chats", [])):
+            return False
+        idx["active"] = cid
+        _write_index_file(idx)
+        return True
 
 
 # ───────────────────────────── HTTP ─────────────────────────────
@@ -528,15 +697,14 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send_json(200, self._chats_index())
             if path.startswith("/api/chats/"):
                 cid = path[len("/api/chats/"):]
-                blob = load_chats()
-                chat = get_chat(blob, cid)
+                chat = load_one_chat(cid)
                 if not chat:
                     return self._send_json(404, {"error": "no such chat"})
                 return self._send_json(200, {"chat": chat})
             # legacy single-conversation alias
             if path == "/api/conversation":
-                blob = load_chats()
-                chat = get_chat(blob, blob.get("active")) or {}
+                idx = load_chats_index()
+                chat = load_one_chat(idx.get("active")) or {}
                 return self._send_json(200, {"messages": chat.get("messages", [])})
             if path == "/api/health":
                 return self._send_json(200, {"ok": True, "version": "2.0", "servers": len(MGR.clients)})
@@ -567,6 +735,21 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/servers/reload":
                 MGR.load(load_tools_config())
                 return self._send_json(200, {"ok": True, "servers": MGR.status_summary()})
+            if path == "/api/servers/toggle":
+                name = (body or {}).get("name")
+                enabled = bool((body or {}).get("enabled"))
+                if not name:
+                    return self._send_json(400, {"error": "missing 'name'"})
+                s = load_settings()
+                m = dict(s.get("mcpEnabled") or {})
+                m[name] = enabled
+                s["mcpEnabled"] = m
+                save_settings(s)
+                MGR.load(load_tools_config())
+                BUS.publish("settings", s, origin=origin)
+                BUS.publish("mcp", {"servers": MGR.status_summary(),
+                                    "tools": MGR.list_tools()})
+                return self._send_json(200, {"ok": True, "servers": MGR.status_summary()})
             if path == "/api/tools/call":
                 name = (body or {}).get("name")
                 args = (body or {}).get("arguments", {}) or {}
@@ -579,9 +762,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self._proxy_llm(body or {})
             if path == "/api/chats":
                 # create
-                blob = load_chats()
+                idx = load_chats_index()
                 cid = _new_id()
-                name = ((body or {}).get("name") or f"Session {len(blob['chats'])+1:02d}").strip() or "Untitled"
+                name = ((body or {}).get("name") or f"Session {len(idx['chats'])+1:02d}").strip() or "Untitled"
                 chat = {
                     "id": cid,
                     "name": name,
@@ -589,36 +772,30 @@ class Handler(BaseHTTPRequestHandler):
                     "updated": int(time.time() * 1000),
                     "messages": (body or {}).get("messages") or [],
                 }
-                blob["chats"].insert(0, chat)
-                blob["active"] = cid
-                save_chats(blob)
+                save_one_chat(chat)
+                set_active_chat(cid)
                 BUS.publish("chats", self._chats_index(), origin=origin)
                 return self._send_json(200, {"chat": chat, "index": self._chats_index()})
             if path == "/api/chats/active":
                 cid = (body or {}).get("id")
-                blob = load_chats()
-                if not get_chat(blob, cid):
+                if not set_active_chat(cid):
                     return self._send_json(404, {"error": "no such chat"})
-                blob["active"] = cid
-                save_chats(blob)
                 BUS.publish("chats", self._chats_index(), origin=origin)
                 return self._send_json(200, {"ok": True, "active": cid})
             if path.startswith("/api/chats/") and path.endswith("/rename"):
                 cid = path[len("/api/chats/"):-len("/rename")]
-                blob = load_chats()
-                chat = get_chat(blob, cid)
+                chat = load_one_chat(cid)
                 if not chat: return self._send_json(404, {"error": "no such chat"})
                 new = ((body or {}).get("name") or "").strip()
                 if new:
                     chat["name"] = new[:120]
                     chat["updated"] = int(time.time() * 1000)
-                    save_chats(blob)
+                    save_one_chat(chat)
                     BUS.publish("chats", self._chats_index(), origin=origin)
                 return self._send_json(200, {"chat": chat})
             if path.startswith("/api/chats/") and path.endswith("/duplicate"):
                 cid = path[len("/api/chats/"):-len("/duplicate")]
-                blob = load_chats()
-                src = get_chat(blob, cid)
+                src = load_one_chat(cid)
                 if not src: return self._send_json(404, {"error": "no such chat"})
                 new = {
                     "id": _new_id(),
@@ -627,14 +804,12 @@ class Handler(BaseHTTPRequestHandler):
                     "updated": int(time.time() * 1000),
                     "messages": list(src.get("messages", [])),
                 }
-                blob["chats"].insert(0, new)
-                save_chats(blob)
+                save_one_chat(new)
                 BUS.publish("chats", self._chats_index(), origin=origin)
                 return self._send_json(200, {"chat": new, "index": self._chats_index()})
             if path.startswith("/api/chats/"):
                 cid = path[len("/api/chats/"):]
-                blob = load_chats()
-                chat = get_chat(blob, cid)
+                chat = load_one_chat(cid)
                 if not chat: return self._send_json(404, {"error": "no such chat"})
                 payload = body or {}
                 if "name" in payload:
@@ -642,7 +817,7 @@ class Handler(BaseHTTPRequestHandler):
                 if "messages" in payload and isinstance(payload["messages"], list):
                     chat["messages"] = payload["messages"]
                 chat["updated"] = int(time.time() * 1000)
-                save_chats(blob)
+                save_one_chat(chat)
                 BUS.publish("chat", {"id": cid, "updated": chat["updated"],
                                      "messages": chat["messages"], "name": chat["name"]},
                             origin=origin)
@@ -650,13 +825,13 @@ class Handler(BaseHTTPRequestHandler):
             # legacy conversation save
             if path == "/api/conversation":
                 msgs = (body or {}).get("messages", [])
-                blob = load_chats()
-                cid = blob.get("active")
-                chat = get_chat(blob, cid)
+                idx = load_chats_index()
+                cid = idx.get("active")
+                chat = load_one_chat(cid)
                 if chat is not None:
                     chat["messages"] = msgs
                     chat["updated"] = int(time.time() * 1000)
-                    save_chats(blob)
+                    save_one_chat(chat)
                     BUS.publish("chat", {"id": cid, "updated": chat["updated"],
                                          "messages": msgs, "name": chat["name"]},
                                 origin=origin)
@@ -671,16 +846,8 @@ class Handler(BaseHTTPRequestHandler):
             origin = self._origin()
             if path.startswith("/api/chats/"):
                 cid = path[len("/api/chats/"):]
-                blob = load_chats()
-                before = len(blob["chats"])
-                blob["chats"] = [c for c in blob["chats"] if c.get("id") != cid]
-                if len(blob["chats"]) == before:
+                if not delete_one_chat(cid):
                     return self._send_json(404, {"error": "no such chat"})
-                if not blob["chats"]:
-                    blob = _default_chats()
-                elif blob.get("active") == cid:
-                    blob["active"] = blob["chats"][0]["id"]
-                save_chats(blob)
                 BUS.publish("chats", self._chats_index(), origin=origin)
                 return self._send_json(200, {"ok": True, "index": self._chats_index()})
             self._send_text(404, "not found")
@@ -690,17 +857,7 @@ class Handler(BaseHTTPRequestHandler):
     # ── chats index helper ──
 
     def _chats_index(self) -> dict:
-        blob = load_chats()
-        return {
-            "active": blob.get("active"),
-            "chats": [{
-                "id": c.get("id"),
-                "name": c.get("name"),
-                "created": c.get("created"),
-                "updated": c.get("updated"),
-                "size": len(c.get("messages", [])),
-            } for c in blob.get("chats", [])],
-        }
+        return load_chats_index()
 
     # ── SSE ──
 
@@ -766,47 +923,77 @@ class Handler(BaseHTTPRequestHandler):
         payload = body.get("body") or {}
         stream = bool(body.get("stream"))
         method = (body.get("method") or "POST").upper()
+        timeout = float(body.get("timeout") or 600)
+        max_retries = int(body.get("retries") or 3)
         if not url:
             return self._send_json(400, {"error": "missing url"})
-        try:
-            data = None
-            req_headers = {**headers}
-            if method != "GET":
-                data = json.dumps(payload).encode("utf-8")
-                req_headers["Content-Type"] = "application/json"
-            req = urllib.request.Request(url, data=data, headers=req_headers, method=method)
-            resp = urllib.request.urlopen(req, timeout=600)
-            if stream:
-                self.send_response(200)
-                self.send_header("Content-Type", "text/event-stream")
-                self.send_header("Cache-Control", "no-cache")
-                self.send_header("X-Accel-Buffering", "no")
-                for k, v in CORS.items():
-                    self.send_header(k, v)
-                self.end_headers()
-                while True:
-                    chunk = resp.read(512)
-                    if not chunk:
-                        break
-                    try:
-                        self.wfile.write(chunk)
-                        self.wfile.flush()
-                    except (BrokenPipeError, ConnectionResetError):
-                        break
-                return
-            response_data = resp.read()
-            self._hdr(resp.status, resp.headers.get("Content-Type", "application/json"), len(response_data))
-            self.wfile.write(response_data)
-        except urllib.error.HTTPError as e:
+
+        data = None
+        req_headers = {**headers}
+        if method != "GET":
+            data = json.dumps(payload).encode("utf-8")
+            req_headers["Content-Type"] = "application/json"
+
+        last_err = None
+        backoff = 1.0
+        for attempt in range(max_retries):
             try:
-                err_body = e.read()
-            except Exception:
-                err_body = json.dumps({"error": str(e)}).encode()
-            ct = e.headers.get("Content-Type", "application/json") if e.headers else "application/json"
-            self._hdr(e.code, ct, len(err_body))
-            self.wfile.write(err_body)
-        except Exception as e:
-            self._send_json(502, {"error": f"proxy: {e}", "trace": traceback.format_exc()})
+                req = urllib.request.Request(url, data=data, headers=req_headers, method=method)
+                resp = urllib.request.urlopen(req, timeout=timeout)
+                if stream:
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/event-stream")
+                    self.send_header("Cache-Control", "no-cache")
+                    self.send_header("X-Accel-Buffering", "no")
+                    for k, v in CORS.items():
+                        self.send_header(k, v)
+                    self.end_headers()
+                    while True:
+                        try:
+                            chunk = resp.read(512)
+                        except (TimeoutError, socket.timeout):
+                            break
+                        if not chunk:
+                            break
+                        try:
+                            self.wfile.write(chunk)
+                            self.wfile.flush()
+                        except (BrokenPipeError, ConnectionResetError):
+                            break
+                    return
+                response_data = resp.read()
+                self._hdr(resp.status, resp.headers.get("Content-Type", "application/json"), len(response_data))
+                self.wfile.write(response_data)
+                return
+            except urllib.error.HTTPError as e:
+                # 5xx errors are retryable; 4xx pass through directly
+                if 500 <= e.code < 600 and attempt < max_retries - 1:
+                    last_err = e
+                    time.sleep(backoff); backoff = min(backoff * 2, 8.0)
+                    continue
+                try:
+                    err_body = e.read()
+                except Exception:
+                    err_body = json.dumps({"error": str(e)}).encode()
+                ct = e.headers.get("Content-Type", "application/json") if e.headers else "application/json"
+                self._hdr(e.code, ct, len(err_body))
+                self.wfile.write(err_body)
+                return
+            except (urllib.error.URLError, TimeoutError, socket.timeout, ConnectionError, OSError) as e:
+                last_err = e
+                if attempt < max_retries - 1:
+                    time.sleep(backoff); backoff = min(backoff * 2, 8.0)
+                    continue
+                break
+            except Exception as e:
+                last_err = e
+                break
+        try:
+            self._send_json(504 if isinstance(last_err, (TimeoutError, socket.timeout)) else 502,
+                            {"error": f"proxy ({type(last_err).__name__ if last_err else 'unknown'}): {last_err}",
+                             "retries": max_retries})
+        except Exception:
+            pass
 
 
 # ───────────────────────────── Main ─────────────────────────────
@@ -856,7 +1043,7 @@ def main():
     if not TOOLS_PATH.exists():
         save_tools_config({"mcpServers": {}})
         print(f"   ▸ wrote empty   {TOOLS_PATH.name}")
-    load_chats()  # bootstrap
+    load_chats_index()  # bootstrap (migrates legacy if needed)
 
     settings = load_settings()
     host = args.host if args.host is not None else ("0.0.0.0" if settings.get("networkVisible") else "127.0.0.1")
