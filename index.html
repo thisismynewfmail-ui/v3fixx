@@ -119,27 +119,39 @@ body::after {
 .app.left-collapsed aside.left  { transform: translateX(-100%); }
 .app.right-collapsed aside.right { transform: translateX(100%); }
 
-/* Edge toggles (live in main area, on the borders) */
-.side-toggle {
-  position: absolute;
-  top: 50%;
-  width: 22px; height: 64px;
-  background: var(--bg-1);
-  border: 1px solid var(--cyan-soft);
-  color: var(--cyan);
+/* Header-mounted panel toggles — kept tiny and unobtrusive */
+.panel-toggle {
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  color: var(--text-faint);
+  width: 22px; height: 22px;
+  display: inline-grid; place-items: center;
   font-family: var(--mono);
-  font-size: 13px;
+  font-size: 11px;
   cursor: pointer;
-  z-index: 40;
-  transform: translateY(-50%);
-  display: grid; place-items: center;
-  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
-  user-select: none;
+  position: relative;
+  transition: color 0.15s, border-color 0.15s, background 0.15s, box-shadow 0.15s;
   letter-spacing: 0;
+  padding: 0;
+  user-select: none;
 }
-.side-toggle:hover { background: rgba(0,230,255,0.10); box-shadow: 0 0 14px rgba(0,230,255,0.30); }
-.side-toggle.left  { left: 0;  border-left: 0; clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 0 6px); }
-.side-toggle.right { right: 0; border-right: 0; clip-path: polygon(0 0, 100% 0, 100% 6px, 100% 100%, 0 100%); }
+.panel-toggle:hover {
+  color: var(--cyan);
+  border-color: var(--cyan-soft);
+  box-shadow: 0 0 8px rgba(0,230,255,0.25);
+}
+.panel-toggle.active {
+  color: var(--cyan);
+  border-color: var(--cyan-soft);
+  background: rgba(0,230,255,0.08);
+}
+.panel-toggle::after {
+  content: ''; position: absolute;
+  inset: -2px; border: 1px dashed transparent;
+  pointer-events: none;
+  transition: border-color 0.15s;
+}
+.panel-toggle:hover::after { border-color: rgba(0,230,255,0.18); }
 
 /* ──────────── Header ──────────── */
 header {
@@ -210,6 +222,12 @@ header::after {
 .header-status {
   display: flex; gap: 8px; align-items: center;
   flex-wrap: wrap; justify-content: flex-end;
+}
+.hdr-panel-toggles {
+  display: inline-flex; gap: 4px;
+  padding: 2px 4px;
+  border-left: 1px dashed var(--line-strong);
+  margin-left: 2px;
 }
 .pill {
   display: inline-flex; align-items: center; gap: 7px;
@@ -304,6 +322,14 @@ aside::-webkit-scrollbar-track { background: transparent; }
   padding: 12px 14px;
   position: relative;
 }
+.side-section::before {
+  content: '';
+  position: absolute; top: 8px; left: 0;
+  width: 3px; height: 14px;
+  background: var(--cyan-deep);
+  opacity: 0.55;
+}
+.side-section + .side-section::before { background: var(--cyan-soft); opacity: 0.35; }
 .side-head {
   display: flex; align-items: center; justify-content: space-between;
   font-family: var(--mono);
@@ -323,25 +349,43 @@ aside::-webkit-scrollbar-track { background: transparent; }
   color: var(--text-faint); padding: 2px 6px; cursor: pointer;
   transition: all 0.15s;
 }
-.side-head .mini-btn:hover { color: var(--cyan); border-color: var(--cyan); }
+.side-head .mini-btn:hover { color: var(--cyan); border-color: var(--cyan); box-shadow: 0 0 6px rgba(0,230,255,0.18); }
+.side-head .mini-btn.primary {
+  color: var(--cyan);
+  border-color: var(--cyan-soft);
+  background: rgba(0,230,255,0.06);
+}
+.side-head .mini-btn.primary:hover { background: rgba(0,230,255,0.14); }
 
-/* chat list */
-.chat-list { display: flex; flex-direction: column; gap: 3px; }
+/* chat list — compact "instrument card" rows */
+.chat-list { display: flex; flex-direction: column; gap: 4px; }
 .chat-row {
-  display: grid; grid-template-columns: 1fr auto;
+  display: grid; grid-template-columns: 14px 1fr auto;
   gap: 6px;
-  padding: 6px 8px;
-  border: 1px solid transparent;
+  padding: 6px 8px 6px 6px;
+  border: 1px solid var(--line-soft);
   border-left: 2px solid var(--line-strong);
-  background: rgba(255,255,255,0.012);
+  background: linear-gradient(90deg, rgba(0,108,128,0.04) 0%, transparent 80%);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
   font-family: var(--mono);
   font-size: 11px;
   position: relative;
   min-width: 0;
   overflow: visible;
+  align-items: center;
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%);
 }
+.chat-row .lamp {
+  width: 6px; height: 6px;
+  background: var(--line-strong);
+  align-self: start;
+  margin-top: 4px;
+  transition: background 0.2s, box-shadow 0.2s;
+}
+.chat-row:hover .lamp { background: var(--cyan-soft); }
+.chat-row.active .lamp { background: var(--cyan); box-shadow: 0 0 6px var(--cyan); }
+.chat-row .body { min-width: 0; }
 .chat-row.compact .nm { font-size: 10.5px; }
 .chat-row.compact .meta { font-size: 8.5px; }
 .chat-row .rename-input {
@@ -519,6 +563,9 @@ aside::-webkit-scrollbar-track { background: transparent; }
 .side-action.danger:hover { color: var(--crit); border-color: var(--crit); box-shadow: 0 0 8px rgba(255,64,96,0.18); }
 .side-action.primary { color: var(--cyan); border-color: var(--cyan-soft); }
 .side-action.primary:hover { background: rgba(0,230,255,0.08); }
+.active-session-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-top: 4px; }
+.active-session-grid .side-action { margin-top: 0; padding: 6px 8px; font-size: 9.5px; letter-spacing: 0.12em; }
+.active-session-grid .side-action.danger { grid-column: 1 / span 2; }
 
 /* ──────────── Main chat ──────────── */
 main {
@@ -653,7 +700,8 @@ main {
   max-width: 100%;
   overflow: hidden;
 }
-.msg-body > * { max-width: 100%; }
+.msg-body > * { max-width: 100%; min-width: 0; }
+.msg-body img, .msg-body video, .msg-body svg, .msg-body iframe { max-width: 100%; height: auto; }
 .msg.user      .msg-body { border-left-color: var(--amber); }
 .msg.assistant .msg-body { border-left-color: var(--cyan); box-shadow: -2px 0 12px rgba(0,230,255,0.06); }
 .msg.tool      .msg-body { border-left-color: var(--magenta); }
@@ -739,42 +787,74 @@ main {
   content: '●'; color: var(--amber); margin-left: 8px; animation: blink 1s infinite;
 }
 
-/* Tool calls — collapsed by default */
+/* Tool calls — single-line by default, compact instrument readout */
 .tool-call {
-  margin: 8px 0;
+  margin: 4px 0;
   border: 1px solid var(--line-strong);
   border-left: 2px solid var(--magenta);
   background: rgba(255,42,109,0.04);
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 10.5px;
+  max-width: 100%;
+  overflow: hidden;
 }
+.tool-call.result { border-left-color: var(--green); background: rgba(76,240,154,0.04); }
+.tool-call.result.err { border-left-color: var(--crit); background: rgba(255,64,96,0.06); }
 .tool-call-head {
-  padding: 6px 12px;
-  border-bottom: 1px solid var(--line);
+  padding: 4px 10px;
   color: var(--magenta);
   letter-spacing: 0.10em;
-  display: flex; justify-content: space-between; align-items: center;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+  align-items: center;
   cursor: pointer;
   user-select: none;
   transition: background 0.15s;
+  min-width: 0;
 }
-.tool-call-head:hover { background: rgba(255,42,109,0.10); }
-.tool-call-head .name { font-weight: 600; color: var(--text); }
-.tool-call-head .arrow { transition: transform 0.2s; display: inline-block; margin-right: 6px; }
+.tool-call.result .tool-call-head { color: var(--green); }
+.tool-call.result.err .tool-call-head { color: var(--crit); }
+.tool-call-head:hover { background: rgba(255,255,255,0.04); }
+.tool-call-head .lhs { display: inline-flex; gap: 6px; align-items: center; min-width: 0; }
+.tool-call-head .name { font-weight: 600; color: var(--text); white-space: nowrap; }
+.tool-call-head .preview {
+  color: var(--text-faint);
+  font-size: 10px;
+  letter-spacing: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.tool-call-head .arrow { transition: transform 0.2s; display: inline-block; }
 .tool-call.open .tool-call-head .arrow { transform: rotate(90deg); }
-.tool-call-detail { display: none; }
-.tool-call.open .tool-call-detail { display: block; }
-.tool-call-body { padding: 8px 12px; color: var(--text-dim); white-space: pre-wrap; max-height: 220px; overflow-y: auto; }
-.tool-call-result {
-  border-top: 1px dashed var(--line);
-  padding: 8px 12px;
-  color: var(--text);
-  background: rgba(76,240,154,0.03);
-  white-space: pre-wrap;
-  max-height: 240px;
-  overflow-y: auto;
+.tool-call-head .id-tag {
+  font-size: 9px; opacity: 0.5;
+  letter-spacing: 0.04em;
+  font-family: var(--mono);
 }
-.tool-call-result.err { background: rgba(255,64,96,0.07); color: var(--crit); }
+.tool-call-detail { display: none; border-top: 1px dashed var(--line); }
+.tool-call.open .tool-call-detail { display: block; }
+.tool-call-body {
+  padding: 6px 10px;
+  color: var(--text-dim);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 220px;
+  overflow: auto;
+  font-size: 10.5px;
+}
+.tool-call-result {
+  padding: 6px 10px;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 240px;
+  overflow: auto;
+  font-size: 10.5px;
+}
+.tool-call-result.err { color: var(--crit); }
 
 /* Rolling-context marker — small, system-style */
 .msg.roll-marker .msg-body {
@@ -1171,7 +1251,7 @@ footer .net-pill.lan { color: var(--magenta); border-color: var(--magenta); }
       <div class="glyph">⌬</div>
       <div class="titles">
         <h1>CHATSGI<span class="slash">/</span><span class="sub">TERMINAL</span></h1>
-        <div class="row1">Section 9 · Stand Alone Complex · MCP Bridge · LAN-Sync · rev 2.0</div>
+        <div class="row1">Section 9 · Stand Alone Complex · MCP Bridge · LAN-Sync · rev 2.1</div>
       </div>
     </div>
     <div></div>
@@ -1200,6 +1280,10 @@ footer .net-pill.lan { color: var(--magenta); border-color: var(--magenta); }
         <span class="lbl">SYNC</span>
         <span class="val" id="sync-status">…</span>
       </div>
+      <span class="hdr-panel-toggles" title="Show / hide side panels">
+        <button class="panel-toggle" id="toggle-left"  title="Toggle CHATS panel"  aria-label="Toggle chats panel"   aria-pressed="true">◧</button>
+        <button class="panel-toggle" id="toggle-right" title="Toggle OPS / TELEMETRY panel" aria-label="Toggle options panel" aria-pressed="true">◨</button>
+      </span>
       <button class="icon-btn" id="btn-settings" title="Settings (⌘,)">⚙</button>
     </div>
   </header>
@@ -1208,10 +1292,9 @@ footer .net-pill.lan { color: var(--magenta); border-color: var(--magenta); }
 
     <div class="side-section">
       <div class="side-head">
-        <span>◢ CHATS</span>
+        <span>◢ CHATS<span class="num" id="chat-count" style="margin-left:8px;"></span></span>
         <span class="right chat-menu-wrap">
-          <button class="mini-btn" id="btn-new-chat" title="New chat">+ NEW</button>
-          <button class="mini-btn" id="btn-chat-menu" title="Chat actions" aria-expanded="false">▾ MENU</button>
+          <button class="mini-btn primary" id="btn-chat-menu" title="Session actions" aria-expanded="false">▾ SESSION</button>
           <div class="chat-menu-pop" id="chat-menu-pop">
             <button data-act="new">▸ NEW SESSION</button>
             <hr/>
@@ -1230,8 +1313,6 @@ footer .net-pill.lan { color: var(--magenta); border-color: var(--magenta); }
   </aside>
 
   <main>
-    <button class="side-toggle left"  id="toggle-left"  title="Toggle chats panel"  aria-label="Toggle chats panel">◀</button>
-    <button class="side-toggle right" id="toggle-right" title="Toggle options panel" aria-label="Toggle options panel">▶</button>
     <span class="reg tl"></span><span class="reg tr"></span>
     <span class="reg bl"></span><span class="reg br"></span>
     <div class="scanline"></div>
@@ -1288,13 +1369,24 @@ footer .net-pill.lan { color: var(--magenta); border-color: var(--magenta); }
 
     <div class="side-section">
       <div class="side-head">
-        <span>◢ OPTIONS</span>
+        <span>◢ OPS</span>
         <span class="right">
           <button class="mini-btn" id="btn-open-settings" title="Open settings drawer">⚙ MORE</button>
         </span>
       </div>
       <button class="side-action primary" id="btn-restart-mcp">▸ RESTART MCP</button>
       <button class="side-action" id="btn-roll-now">▸ ROLL CONTEXT NOW</button>
+    </div>
+
+    <div class="side-section">
+      <div class="side-head"><span>◢ ACTIVE SESSION</span><span class="num" id="active-session-name">—</span></div>
+      <div class="active-session-grid">
+        <button class="side-action" data-act-act="rename"    title="Rename active chat">▸ RENAME</button>
+        <button class="side-action" data-act-act="duplicate" title="Duplicate active chat">▸ DUPLICATE</button>
+        <button class="side-action" data-act-act="copy"      title="Copy active chat to clipboard">▸ COPY TEXT</button>
+        <button class="side-action" data-act-act="export"    title="Export active chat as JSON">▸ EXPORT JSON</button>
+        <button class="side-action danger" data-act-act="delete" title="Delete active chat">▸ DELETE</button>
+      </div>
     </div>
 
     <div class="side-section">
@@ -1777,6 +1869,12 @@ function handleEvent(evt) {
 
 /* ───────────────── Render ───────────────── */
 function fmtTs(ts) { if (!ts) return ''; return new Date(ts).toTimeString().slice(0, 8); }
+function oneLinePreview(s, n) {
+  if (s == null) return '';
+  let t = String(s).replace(/\s+/g, ' ').trim();
+  if (t.length > n) t = t.slice(0, n - 1) + '…';
+  return t;
+}
 function fmtAgo(ts) {
   if (!ts) return '';
   const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
@@ -1788,14 +1886,22 @@ function fmtAgo(ts) {
 
 function renderChatList() {
   const list = $('chat-list');
-  if (!state.chats.length) { list.innerHTML = '<div class="empty-msg">No chats yet.</div>'; return; }
+  const cc = $('chat-count');
+  if (cc) cc.textContent = state.chats.length ? `· ${String(state.chats.length).padStart(2,'0')}` : '';
+  const an = $('active-session-name');
+  if (an) {
+    const cur = state.chats.find(c => c.id === state.activeChatId);
+    an.textContent = cur ? oneLinePreview(cur.name || '(untitled)', 18) : '—';
+  }
+  if (!state.chats.length) { list.innerHTML = '<div class="empty-msg">No chats yet. Use ▾ SESSION → NEW SESSION.</div>'; return; }
   list.innerHTML = state.chats.map(c => `
-    <div class="chat-row ${c.id === state.activeChatId ? 'active' : ''}" data-id="${escapeHtml(c.id)}">
-      <div>
+    <div class="chat-row compact ${c.id === state.activeChatId ? 'active' : ''}" data-id="${escapeHtml(c.id)}" title="Click to open · double-click to rename">
+      <span class="lamp" aria-hidden="true"></span>
+      <div class="body">
         <div class="nm">${escapeHtml(c.name || '(untitled)')}</div>
-        <div class="meta">${c.size||0} MSG · ${escapeHtml(fmtAgo(c.updated))}</div>
+        <div class="meta">${String(c.size||0).padStart(3,'0')} MSG · ${escapeHtml(fmtAgo(c.updated))}</div>
       </div>
-      <button class="menu-btn" data-menu="${escapeHtml(c.id)}" title="Actions">⋮</button>
+      <button class="menu-btn" data-menu="${escapeHtml(c.id)}" title="Row actions">⋮</button>
       <div class="chat-pop" data-pop="${escapeHtml(c.id)}">
         <button data-act="rename">▸ RENAME</button>
         <button data-act="duplicate">▸ DUPLICATE</button>
@@ -1807,9 +1913,14 @@ function renderChatList() {
   `).join('');
   list.querySelectorAll('.chat-row').forEach(row => {
     row.addEventListener('click', (e) => {
-      if (e.target.closest('[data-menu], .chat-pop')) return;
+      if (e.target.closest('[data-menu], .chat-pop, .rename-input')) return;
       const id = row.dataset.id;
       if (id !== state.activeChatId) selectChat(id);
+    });
+    row.addEventListener('dblclick', (e) => {
+      if (e.target.closest('[data-menu], .chat-pop')) return;
+      e.preventDefault();
+      startInlineRename(row.dataset.id);
     });
   });
   list.querySelectorAll('[data-menu]').forEach(b => {
@@ -1999,14 +2110,17 @@ function buildMessageEl(m, idx) {
 
   if (Array.isArray(m.tool_calls)) {
     for (const tc of m.tool_calls) {
-      let pretty = tc.function?.arguments ?? '';
-      try { pretty = JSON.stringify(JSON.parse(pretty), null, 2); } catch {}
+      let raw = tc.function?.arguments ?? '';
+      let pretty = raw;
+      try { pretty = JSON.stringify(JSON.parse(raw), null, 2); } catch {}
+      const preview = oneLinePreview(raw, 120);
       const el = document.createElement('div');
       el.className = 'tool-call' + (state.settings.toolsCollapsed ? '' : ' open');
       el.innerHTML = `
-        <div class="tool-call-head">
-          <span><span class="arrow">▸</span><span style="color:var(--text-faint)">CALL </span><span class="name">${escapeHtml(tc.function?.name || '?')}</span></span>
-          <span style="font-size:9px; opacity:0.6">${escapeHtml((tc.id || '').slice(-8))}</span>
+        <div class="tool-call-head" title="Toggle detail">
+          <span class="lhs"><span class="arrow">▸</span><span style="color:var(--text-faint)">CALL</span><span class="name">${escapeHtml(tc.function?.name || '?')}</span></span>
+          <span class="preview">${escapeHtml(preview)}</span>
+          <span class="id-tag">${escapeHtml((tc.id || '').slice(-6))}</span>
         </div>
         <div class="tool-call-detail">
           <div class="tool-call-body">${escapeHtml(pretty)}</div>
@@ -2017,12 +2131,14 @@ function buildMessageEl(m, idx) {
   }
 
   if (m.role === 'tool') {
+    const preview = oneLinePreview(m.content || '', 140);
     const head = document.createElement('div');
-    head.className = 'tool-call' + (state.settings.toolsCollapsed ? '' : ' open');
+    head.className = 'tool-call result' + (m._error ? ' err' : '') + (state.settings.toolsCollapsed ? '' : ' open');
     head.innerHTML = `
-      <div class="tool-call-head">
-        <span><span class="arrow">▸</span><span style="color:var(--text-faint)">RESULT </span><span class="name">${escapeHtml(m.name || '?')}</span></span>
-        <span style="font-size:9px; opacity:0.6">${escapeHtml((m.tool_call_id || '').slice(-8))}</span>
+      <div class="tool-call-head" title="Toggle output">
+        <span class="lhs"><span class="arrow">▸</span><span style="color:var(--text-faint)">${m._error ? 'ERR ' : 'OUT '}</span><span class="name">${escapeHtml(m.name || '?')}</span></span>
+        <span class="preview">${escapeHtml(preview)}</span>
+        <span class="id-tag">${escapeHtml((m.tool_call_id || '').slice(-6))}</span>
       </div>
       <div class="tool-call-detail">
         <div class="tool-call-result${m._error ? ' err' : ''}">${escapeHtml(m.content || '')}</div>
@@ -2846,8 +2962,6 @@ function attachWiring() {
     showToast('PURGED', 'Active chat cleared.', 'red');
   });
 
-  $('btn-new-chat').addEventListener('click', () => createChat(''));
-
   // Consolidated CHAT menu (left side, under the section head)
   const chatMenuBtn = $('btn-chat-menu');
   const chatMenuPop = $('chat-menu-pop');
@@ -2869,6 +2983,14 @@ function attachWiring() {
   });
 
   $('btn-open-settings').addEventListener('click', openDrawer);
+
+  // Right-side ACTIVE SESSION ops (mirror of session menu)
+  document.querySelectorAll('[data-act-act]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!state.activeChatId) { showToast('NO ACTIVE CHAT', 'Create one first.', 'amber'); return; }
+      await chatAction(state.activeChatId, btn.dataset.actAct);
+    });
+  });
 
   $('btn-roll-now').addEventListener('click', () => {
     if (state.messages.length < 4) { showToast('SKIPPED', 'Not enough turns.', 'amber'); return; }
@@ -2926,8 +3048,18 @@ function attachWiring() {
 function updateToggleIcons() {
   const app = document.querySelector('.app');
   const lt = $('toggle-left'); const rt = $('toggle-right');
-  if (lt) lt.textContent = app.classList.contains('left-collapsed')  ? '▶' : '◀';
-  if (rt) rt.textContent = app.classList.contains('right-collapsed') ? '◀' : '▶';
+  if (lt) {
+    const hidden = app.classList.contains('left-collapsed');
+    lt.textContent = '◧';
+    lt.classList.toggle('active', !hidden);
+    lt.setAttribute('aria-pressed', hidden ? 'false' : 'true');
+  }
+  if (rt) {
+    const hidden = app.classList.contains('right-collapsed');
+    rt.textContent = '◨';
+    rt.classList.toggle('active', !hidden);
+    rt.setAttribute('aria-pressed', hidden ? 'false' : 'true');
+  }
 }
 
 function applySideCollapsedFromSettings() {
