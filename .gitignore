@@ -1,0 +1,12 @@
+# Per-session chat files (user data). The backend will auto-migrate
+# chats.json (and conversation.json) into data/ on first run.
+data/
+*.json.tmp
+
+# Python bytecode
+__pycache__/
+*.pyc
+
+# Local editor / OS cruft
+.DS_Store
+*.swp

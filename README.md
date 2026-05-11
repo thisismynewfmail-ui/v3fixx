@@ -22,8 +22,9 @@ in real time across the LAN.
 | `index.html`        | UI, served by `start.py` at `/`                      |
 | `tools.json`        | MCP server config (Claude-Desktop format)            |
 | `settings.json`     | persisted UI settings (auto-created)                 |
-| `chats.json`        | multi-chat history store (auto-created / migrated)   |
-| `conversation.json` | legacy single-chat log — migrated into `chats.json`  |
+| `data/`             | per-session chat files (one `.json` per chat) + `index.json` |
+| `chats.json`        | legacy bundled history — migrated into `data/` on boot |
+| `conversation.json` | legacy single-chat log — migrated into `data/`       |
 | `requirements.txt`  | empty (stdlib only — kept for transparency)          |
 
 ## ◢ Run
@@ -44,19 +45,33 @@ Requires Python ≥ 3.10. No `pip install` needed — stdlib only.
 
 ## ◢ Features
 
-- **Multi-chat sessions** — left sidebar lists every chat; rename, duplicate,
-  copy-to-clipboard, export, delete from the per-row menu. The active chat is
-  highlighted; all chats persist to disk.
+- **Multi-chat sessions** — left sidebar lists every chat; each session lives
+  in its own file under `data/`. Consolidated `▾ MENU` button (New / Rename /
+  Duplicate / Copy / Export / Delete the active chat) and per-row `⋮` menu for
+  the same actions on any other chat. Inline rename (click ▾ MENU → RENAME).
+- **Collapsible side panels** — toggle the left chat list and the right
+  options/MCP/telemetry panel independently using the edge buttons on the
+  main pane. Collapsed state persists across reloads.
 - **Cross-instance sync** — every browser/window subscribes to a Server-Sent
   Events stream. Send a message on one monitor and it appears on every other
   connected viewer immediately. Settings, chat list, active selection, and
   MCP status all mirror.
-- **Background compaction** — when context usage crosses the threshold the
-  buffer is recompacted in the background. The chat UI is *not* polluted with
-  banners; the `CMP` status pill in the bottom status bar spins while it
-  runs.
+- **Rolling context window** — when token usage crosses the threshold the
+  oldest middle messages fall out of the window until usage drops below the
+  cap. The first user message (original task) and the most recent turns are
+  always preserved. Tool-call / tool-result pairs drop atomically so the
+  trace stays coherent. The `ROLL` status pill in the bottom status bar
+  spins while it runs; a compact marker is left in the chat where the cut
+  happened. Each tool round gets a fresh `max_tokens` budget so tool calls
+  are not counted against the output-token cap.
+- **Per-MCP-server toggle** — flip an individual server on/off from the right
+  panel. Disabled servers are not started and their tools are withheld from
+  the model. Persists in `settings.json` (`mcpEnabled`).
 - **Collapsed tool calls** — every tool call and tool result is collapsed by
   default; click the header to expand. Toggle the default in settings.
+- **Connection retry** — the LLM proxy retries transient network failures
+  (and 5xx responses) with exponential backoff, both server-side and
+  (for direct-mode) client-side.
 - **Sampling controls** — temperature, top_p, top_k, min_p, repeat_penalty,
   frequency_penalty, presence_penalty, seed, stop sequences. Extended params
   are sent both top-level and inside `extra_body` for llama.cpp / ollama /

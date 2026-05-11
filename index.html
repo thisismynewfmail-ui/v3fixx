@@ -106,13 +106,40 @@ body::after {
 .app {
   display: grid;
   grid-template-rows: auto 1fr auto;
-  grid-template-columns: 280px 1fr;
+  grid-template-columns: var(--left-w, 280px) minmax(0, 1fr) var(--right-w, 300px);
   grid-template-areas:
-    "head head"
-    "side main"
-    "foot foot";
+    "head head head"
+    "side main rside"
+    "foot foot foot";
   height: 100vh; width: 100vw;
+  transition: grid-template-columns 0.25s ease;
 }
+.app.left-collapsed  { --left-w: 0px; }
+.app.right-collapsed { --right-w: 0px; }
+.app.left-collapsed aside.left  { transform: translateX(-100%); }
+.app.right-collapsed aside.right { transform: translateX(100%); }
+
+/* Edge toggles (live in main area, on the borders) */
+.side-toggle {
+  position: absolute;
+  top: 50%;
+  width: 22px; height: 64px;
+  background: var(--bg-1);
+  border: 1px solid var(--cyan-soft);
+  color: var(--cyan);
+  font-family: var(--mono);
+  font-size: 13px;
+  cursor: pointer;
+  z-index: 40;
+  transform: translateY(-50%);
+  display: grid; place-items: center;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+  user-select: none;
+  letter-spacing: 0;
+}
+.side-toggle:hover { background: rgba(0,230,255,0.10); box-shadow: 0 0 14px rgba(0,230,255,0.30); }
+.side-toggle.left  { left: 0;  border-left: 0; clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 0 6px); }
+.side-toggle.right { right: 0; border-right: 0; clip-path: polygon(0 0, 100% 0, 100% 6px, 100% 100%, 0 100%); }
 
 /* ──────────── Header ──────────── */
 header {
@@ -247,16 +274,24 @@ header::after {
 
 /* ──────────── Sidebar ──────────── */
 aside {
-  grid-area: side;
-  border-right: 1px solid var(--line);
   background: linear-gradient(180deg, #04141d 0%, #020a10 100%);
   overflow-y: auto;
   overflow-x: hidden;
   position: relative;
+  transition: transform 0.25s ease;
+  min-width: 0;
 }
-aside::before {
+aside.left  { grid-area: side; border-right: 1px solid var(--line); }
+aside.right { grid-area: rside; border-left:  1px solid var(--line); }
+aside.left::before {
   content: '';
   position: absolute; right: 0; top: 0; bottom: 0; width: 1px;
+  background: linear-gradient(180deg, transparent, var(--cyan-deep) 40%, var(--cyan-deep) 60%, transparent);
+  opacity: 0.4;
+}
+aside.right::before {
+  content: '';
+  position: absolute; left: 0; top: 0; bottom: 0; width: 1px;
   background: linear-gradient(180deg, transparent, var(--cyan-deep) 40%, var(--cyan-deep) 60%, transparent);
   opacity: 0.4;
 }
@@ -291,11 +326,11 @@ aside::-webkit-scrollbar-track { background: transparent; }
 .side-head .mini-btn:hover { color: var(--cyan); border-color: var(--cyan); }
 
 /* chat list */
-.chat-list { display: flex; flex-direction: column; gap: 4px; }
+.chat-list { display: flex; flex-direction: column; gap: 3px; }
 .chat-row {
   display: grid; grid-template-columns: 1fr auto;
-  gap: 8px;
-  padding: 7px 8px;
+  gap: 6px;
+  padding: 6px 8px;
   border: 1px solid transparent;
   border-left: 2px solid var(--line-strong);
   background: rgba(255,255,255,0.012);
@@ -304,6 +339,21 @@ aside::-webkit-scrollbar-track { background: transparent; }
   font-family: var(--mono);
   font-size: 11px;
   position: relative;
+  min-width: 0;
+  overflow: visible;
+}
+.chat-row.compact .nm { font-size: 10.5px; }
+.chat-row.compact .meta { font-size: 8.5px; }
+.chat-row .rename-input {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--cyan);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  padding: 3px 6px;
+  outline: none;
 }
 .chat-row:hover { background: rgba(0,230,255,0.05); border-left-color: var(--cyan-soft); }
 .chat-row.active {
@@ -355,6 +405,61 @@ aside::-webkit-scrollbar-track { background: transparent; }
 .chat-pop button:hover { background: rgba(0,230,255,0.08); color: var(--cyan); }
 .chat-pop button:last-child { border-bottom: none; }
 .chat-pop button.danger:hover { color: var(--crit); background: rgba(255,64,96,0.08); }
+
+/* Chat header dropdown (consolidated New/Rename/Export/Copy menu) */
+.chat-menu-wrap { position: relative; }
+.chat-menu-pop {
+  position: absolute;
+  right: 0; top: calc(100% + 4px);
+  background: var(--bg-1);
+  border: 1px solid var(--cyan-soft);
+  z-index: 80;
+  min-width: 180px;
+  font-family: var(--mono); font-size: 10px;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.6), 0 0 18px rgba(0,230,255,0.08);
+  display: none;
+}
+.chat-menu-pop.open { display: block; }
+.chat-menu-pop button {
+  display: block; width: 100%; text-align: left;
+  padding: 8px 12px;
+  background: transparent;
+  color: var(--text-dim);
+  border: 0;
+  border-bottom: 1px solid var(--line-soft);
+  cursor: pointer;
+  font: inherit; letter-spacing: inherit;
+}
+.chat-menu-pop button:hover { background: rgba(0,230,255,0.10); color: var(--cyan); }
+.chat-menu-pop button:last-child { border-bottom: none; }
+.chat-menu-pop button.danger:hover { color: var(--crit); background: rgba(255,64,96,0.10); }
+.chat-menu-pop hr {
+  border: 0; border-top: 1px dashed var(--line-strong); margin: 0;
+}
+
+/* MCP server row toggle */
+.server-row .switch {
+  width: 24px; height: 12px;
+  background: var(--bg);
+  border: 1px solid var(--line-strong);
+  position: relative;
+  cursor: pointer;
+  margin-right: 4px;
+  flex-shrink: 0;
+  transition: background 0.15s, border-color 0.15s;
+}
+.server-row .switch::after {
+  content: ''; position: absolute; top: 1px; left: 1px;
+  width: 8px; height: 8px;
+  background: var(--text-faint);
+  transition: left 0.15s, background 0.15s;
+}
+.server-row.enabled .switch { background: rgba(0,230,255,0.18); border-color: var(--cyan); }
+.server-row.enabled .switch::after { left: 13px; background: var(--cyan); box-shadow: 0 0 4px var(--cyan); }
+.server-row.disabled .marker { background: var(--text-faint); opacity: 0.5; }
+.server-row.disabled .name   { color: var(--text-faint); text-decoration: line-through; opacity: 0.7; }
 
 .server-row {
   display: grid;
@@ -422,6 +527,7 @@ main {
   grid-template-rows: 1fr auto;
   overflow: hidden;
   position: relative;
+  min-width: 0;
   background:
     linear-gradient(180deg, transparent 0%, rgba(0,108,128,0.05) 100%),
     repeating-linear-gradient(90deg, var(--grid) 0 1px, transparent 1px 70px),
@@ -435,9 +541,11 @@ main {
 
 .chat-scroll {
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 28px 40px 24px 40px;
   scroll-behavior: smooth;
   position: relative;
+  min-width: 0;
 }
 .chat-scroll::-webkit-scrollbar { width: 10px; }
 .chat-scroll::-webkit-scrollbar-track { background: transparent; }
@@ -505,10 +613,12 @@ main {
 /* Message rows */
 .msg {
   display: grid;
-  grid-template-columns: 110px 1fr;
+  grid-template-columns: 110px minmax(0, 1fr);
   gap: 18px;
   margin-bottom: 20px;
   align-items: start;
+  min-width: 0;
+  max-width: 100%;
 }
 .msg-meta {
   font-family: var(--mono);
@@ -536,9 +646,14 @@ main {
   line-height: 1.65;
   color: var(--text);
   word-wrap: break-word;
-  overflow-wrap: break-word;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   position: relative;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
+.msg-body > * { max-width: 100%; }
 .msg.user      .msg-body { border-left-color: var(--amber); }
 .msg.assistant .msg-body { border-left-color: var(--cyan); box-shadow: -2px 0 12px rgba(0,230,255,0.06); }
 .msg.tool      .msg-body { border-left-color: var(--magenta); }
@@ -563,9 +678,14 @@ main {
   font-size: 12px;
   line-height: 1.5;
   overflow-x: auto;
+  overflow-y: hidden;
   margin: 8px 0;
   color: var(--text);
+  max-width: 100%;
+  white-space: pre;
 }
+.msg-body pre code { white-space: pre; }
+.msg-body table { display: block; overflow-x: auto; max-width: 100%; }
 .msg-body pre code { background: none; border: none; padding: 0; color: inherit; }
 .msg-body ul, .msg-body ol { margin: 0.4em 0 0.8em 1.4em; }
 .msg-body li { margin-bottom: 0.2em; }
@@ -656,7 +776,13 @@ main {
 }
 .tool-call-result.err { background: rgba(255,64,96,0.07); color: var(--crit); }
 
-/* (compaction message is rendered NOT inline — see footer/status bar) */
+/* Rolling-context marker — small, system-style */
+.msg.roll-marker .msg-body {
+  border-left-color: var(--cyan-deep);
+  background: rgba(0,108,128,0.06);
+  padding: 6px 12px;
+}
+.msg.roll-marker { margin-bottom: 10px; opacity: 0.85; }
 
 /* Composer */
 .composer-wrap {
@@ -1009,9 +1135,25 @@ footer .net-pill.lan { color: var(--magenta); border-color: var(--magenta); }
   white-space: pre-wrap;
 }
 
-@media (max-width: 920px) {
-  .app { grid-template-columns: 0 1fr; }
-  aside { display: none; }
+@media (max-width: 1100px) {
+  .app { grid-template-columns: var(--left-w, 220px) minmax(0, 1fr) var(--right-w, 240px); }
+}
+@media (max-width: 820px) {
+  .app {
+    grid-template-columns: var(--left-w, 0px) minmax(0, 1fr) var(--right-w, 0px);
+    grid-template-areas:
+      "head head head"
+      "main main main"
+      "foot foot foot";
+  }
+  aside.left, aside.right {
+    position: fixed; top: 0; bottom: 0; width: 280px; z-index: 60;
+    box-shadow: 0 0 30px rgba(0,0,0,0.6);
+  }
+  aside.left  { left: 0; transform: translateX(-100%); }
+  aside.right { right: 0; transform: translateX(100%); }
+  .app:not(.left-collapsed)  aside.left  { transform: translateX(0); }
+  .app:not(.right-collapsed) aside.right { transform: translateX(0); }
   .msg { grid-template-columns: 70px 1fr; gap: 10px; }
   .chat-scroll { padding: 22px 16px; }
   .composer-wrap { padding: 12px 14px; }
@@ -1062,51 +1204,34 @@ footer .net-pill.lan { color: var(--magenta); border-color: var(--magenta); }
     </div>
   </header>
 
-  <aside>
+  <aside class="left" id="aside-left">
 
     <div class="side-section">
       <div class="side-head">
         <span>◢ CHATS</span>
-        <span class="right">
+        <span class="right chat-menu-wrap">
           <button class="mini-btn" id="btn-new-chat" title="New chat">+ NEW</button>
+          <button class="mini-btn" id="btn-chat-menu" title="Chat actions" aria-expanded="false">▾ MENU</button>
+          <div class="chat-menu-pop" id="chat-menu-pop">
+            <button data-act="new">▸ NEW SESSION</button>
+            <hr/>
+            <button data-act="rename">▸ RENAME ACTIVE</button>
+            <button data-act="duplicate">▸ DUPLICATE ACTIVE</button>
+            <button data-act="copy">▸ COPY ACTIVE TO CLIPBOARD</button>
+            <button data-act="export">▸ EXPORT ACTIVE (JSON)</button>
+            <hr/>
+            <button data-act="delete" class="danger">▸ DELETE ACTIVE</button>
+          </div>
         </span>
       </div>
       <div class="chat-list" id="chat-list"></div>
     </div>
 
-    <div class="side-section">
-      <div class="side-head"><span>◢ MCP / NODES</span><span class="num">§ 2</span></div>
-      <div id="server-list">
-        <div class="empty-msg">No MCP servers running.<br/>Configure <code style="font-size:9px;background:var(--bg-2);padding:1px 4px;">tools.json</code> in settings → § 5.</div>
-      </div>
-    </div>
-
-    <div class="side-section">
-      <div class="side-head"><span>◢ TELEMETRY</span><span class="num">§ 3</span></div>
-      <div class="stat-grid">
-        <div class="lbl">Messages</div><div class="val" id="stat-msgs">0</div>
-        <div class="lbl">Tokens</div><div class="val" id="stat-tokens">0</div>
-        <div class="lbl">Tools</div><div class="val" id="stat-tools">0</div>
-        <div class="lbl">Servers</div><div class="val" id="stat-servers">0 / 0</div>
-        <div class="lbl">Compactions</div><div class="val" id="stat-compactions">0</div>
-        <div class="lbl">Threshold</div><div class="val" id="stat-threshold">70%</div>
-        <div class="lbl">Backend</div><div class="val" id="stat-backend">—</div>
-        <div class="lbl">Network</div><div class="val" id="stat-network">LOCAL</div>
-      </div>
-    </div>
-
-    <div class="side-section">
-      <div class="side-head"><span>◢ ACTIONS</span><span class="num">§ 4</span></div>
-      <button class="side-action primary" id="btn-new-conv">▸ NEW CONVERSATION</button>
-      <button class="side-action" id="btn-export">▸ EXPORT TRANSCRIPT</button>
-      <button class="side-action" id="btn-copy-chat">▸ COPY CHAT TO CLIPBOARD</button>
-      <button class="side-action" id="btn-compact-now">▸ COMPACT NOW</button>
-      <button class="side-action" id="btn-restart-mcp">▸ RESTART MCP</button>
-    </div>
-
   </aside>
 
   <main>
+    <button class="side-toggle left"  id="toggle-left"  title="Toggle chats panel"  aria-label="Toggle chats panel">◀</button>
+    <button class="side-toggle right" id="toggle-right" title="Toggle options panel" aria-label="Toggle options panel">▶</button>
     <span class="reg tl"></span><span class="reg tr"></span>
     <span class="reg bl"></span><span class="reg br"></span>
     <div class="scanline"></div>
@@ -1159,12 +1284,52 @@ footer .net-pill.lan { color: var(--magenta); border-color: var(--magenta); }
     </div>
   </main>
 
+  <aside class="right" id="aside-right">
+
+    <div class="side-section">
+      <div class="side-head">
+        <span>◢ OPTIONS</span>
+        <span class="right">
+          <button class="mini-btn" id="btn-open-settings" title="Open settings drawer">⚙ MORE</button>
+        </span>
+      </div>
+      <button class="side-action primary" id="btn-restart-mcp">▸ RESTART MCP</button>
+      <button class="side-action" id="btn-roll-now">▸ ROLL CONTEXT NOW</button>
+    </div>
+
+    <div class="side-section">
+      <div class="side-head"><span>◢ MCP / NODES</span><span class="num">§ 2</span></div>
+      <div id="server-list">
+        <div class="empty-msg">No MCP servers configured.<br/>Edit <code style="font-size:9px;background:var(--bg-2);padding:1px 4px;">tools.json</code> in settings → § 5.</div>
+      </div>
+      <div style="margin-top:8px; font-family:var(--mono); font-size:8.5px; color:var(--text-faint); letter-spacing:0.14em; line-height:1.6;">
+        ▸ TOGGLE switches enable / disable per server.<br/>
+        ▸ Disabled servers are not started and their tools are withheld from the model.
+      </div>
+    </div>
+
+    <div class="side-section">
+      <div class="side-head"><span>◢ TELEMETRY</span><span class="num">§ 3</span></div>
+      <div class="stat-grid">
+        <div class="lbl">Messages</div><div class="val" id="stat-msgs">0</div>
+        <div class="lbl">Tokens</div><div class="val" id="stat-tokens">0</div>
+        <div class="lbl">Tools</div><div class="val" id="stat-tools">0</div>
+        <div class="lbl">Servers</div><div class="val" id="stat-servers">0 / 0</div>
+        <div class="lbl">Rolls</div><div class="val" id="stat-compactions">0</div>
+        <div class="lbl">Threshold</div><div class="val" id="stat-threshold">70%</div>
+        <div class="lbl">Backend</div><div class="val" id="stat-backend">—</div>
+        <div class="lbl">Network</div><div class="val" id="stat-network">LOCAL</div>
+      </div>
+    </div>
+
+  </aside>
+
   <footer>
     <div class="group"><span class="lbl">SYS</span><span class="val">CHATSGI-TERM v2.0</span></div>
     <div class="group"><span class="lbl">EP</span><span class="val" id="foot-ep">—</span></div>
     <div class="group"><span class="lbl">CTX</span><span class="val" id="foot-ctx">0 / 64200</span></div>
     <div class="group">
-      <span class="lbl">CMP</span>
+      <span class="lbl">ROLL</span>
       <span class="compaction-state" id="foot-cmp">
         <span class="spinner"></span>
         <span id="foot-cmp-text">idle</span>
@@ -1182,8 +1347,8 @@ footer .net-pill.lan { color: var(--magenta); border-color: var(--magenta); }
 </div>
 
 <div class="toast" id="toast">
-  <div class="title">CONTEXT COMPACTION</div>
-  <div id="toast-body">Recompiling conversation buffer…</div>
+  <div class="title">CONTEXT ROLL</div>
+  <div id="toast-body">Rolling conversation buffer…</div>
 </div>
 
 <!-- Settings drawer -->
@@ -1253,10 +1418,10 @@ footer .net-pill.lan { color: var(--magenta); border-color: var(--magenta); }
     </div>
 
     <div class="sect">
-      <div class="sect-head"><span class="num">§ 3</span><span>CONTEXT &amp; COMPACTION</span></div>
+      <div class="sect-head"><span class="num">§ 3</span><span>CONTEXT &amp; ROLLING WINDOW</span></div>
       <div class="field-row">
         <div class="field"><label>Context Window (tokens)</label><input type="number" id="cfg-ctx" min="1024" step="1024" /></div>
-        <div class="field"><label>Compaction Threshold (%)</label><input type="number" id="cfg-threshold" min="30" max="95" step="1" /></div>
+        <div class="field"><label>Roll Threshold (%)</label><input type="number" id="cfg-threshold" min="30" max="95" step="1" /></div>
       </div>
       <div class="field-row">
         <div class="field"><label>Max Tool-Call Recursion</label><input type="number" id="cfg-max-recursion" min="1" max="64" step="1" /></div>
@@ -1265,7 +1430,11 @@ footer .net-pill.lan { color: var(--magenta); border-color: var(--magenta); }
         </div>
       </div>
       <div class="help" style="font-family:var(--mono); font-size:9.5px; color:var(--text-faint); line-height:1.6;">
-        Compaction is triggered automatically in the background when context crosses threshold. It does not clutter the chat — progress is shown in the bottom status bar (CMP) only. System message + first 10% + last 30% are preserved; the middle is summarised by the model.
+        ◢ ROLLING CONTEXT WINDOW · When token usage crosses the threshold, the oldest middle turns
+        "fall off" until usage drops below the limit. The system prompt and the <em>first user
+        message</em> are always preserved (to keep the original task intact); the most recent turns
+        are preserved too. Tool-call / tool-result pairs are removed together so the trace stays
+        coherent. Indicator: <code>CTX</code> meter in the status bar.
       </div>
     </div>
 
@@ -1413,6 +1582,9 @@ const DEFAULTS = {
   presencePenalty: 0.0,
   stopSequences: '',
   seed: 0,
+  mcpEnabled: {},
+  leftCollapsed: false,
+  rightCollapsed: false,
 };
 
 const state = {
@@ -1448,7 +1620,10 @@ function msgTokens(m) {
 }
 function totalTokens() {
   let t = estTok(state.settings.systemPrompt) + 8;
-  for (const m of state.messages) t += msgTokens(m);
+  for (const m of state.messages) {
+    if (m._rolled || m._compaction) continue;   // UI markers don't count
+    t += msgTokens(m);
+  }
   if (state.settings.toolsEnabled && state.tools.length) t += estTok(JSON.stringify(state.tools));
   return t;
 }
@@ -1568,6 +1743,7 @@ function handleEvent(evt) {
   if (evt.kind === 'settings') {
     state.settings = { ...DEFAULTS, ...evt.payload };
     if ($('drawer').classList.contains('open')) applyToForm();
+    applySideCollapsedFromSettings();
     updateStatus(); renderEmptyCheck();
   } else if (evt.kind === 'tools-config') {
     refreshServers();
@@ -1654,14 +1830,42 @@ function renderChatList() {
   });
 }
 
-async function chatAction(id, act) {
-  if (act === 'rename') {
-    const cur = state.chats.find(c => c.id === id);
-    const name = prompt('Rename chat:', cur?.name || '');
-    if (name && name.trim()) {
-      try { await apiPost('/api/chats/' + id + '/rename', { name: name.trim() }); }
+function startInlineRename(id) {
+  const row = document.querySelector(`.chat-row[data-id="${CSS.escape(id)}"]`);
+  if (!row) return;
+  const nm = row.querySelector('.nm');
+  if (!nm) return;
+  const cur = state.chats.find(c => c.id === id);
+  const old = cur?.name || '';
+  const input = document.createElement('input');
+  input.className = 'rename-input';
+  input.value = old;
+  input.maxLength = 120;
+  const parent = nm.parentNode;
+  nm.style.display = 'none';
+  parent.insertBefore(input, nm);
+  input.focus(); input.select();
+  let done = false;
+  const finish = async (save) => {
+    if (done) return; done = true;
+    const val = input.value.trim();
+    input.remove(); nm.style.display = '';
+    if (save && val && val !== old) {
+      try { await apiPost('/api/chats/' + id + '/rename', { name: val }); }
       catch (e) { showToast('RENAME FAILED', e.message, 'red'); }
     }
+  };
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+    else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+  });
+  input.addEventListener('blur', () => finish(true));
+  input.addEventListener('click', e => e.stopPropagation());
+}
+
+async function chatAction(id, act) {
+  if (act === 'rename') {
+    startInlineRename(id);
   } else if (act === 'duplicate') {
     try {
       const j = await apiPost('/api/chats/' + id + '/duplicate', {});
@@ -1753,15 +1957,20 @@ function renderMessages() {
 function buildMessageEl(m, idx) {
   const wrap = document.createElement('div');
   wrap.className = 'msg ' + (m.role || 'system');
-  if (m._compaction) {
-    // legacy entries — render as small system note instead of cluttering
+  if (m._rolled || m._compaction) {
+    // Compact "marker" row for context rolls — keeps the timeline visible
+    // without dumping a summarised block into the conversation.
+    wrap.className = 'msg system roll-marker';
     const meta = document.createElement('div');
     meta.className = 'msg-meta';
-    meta.innerHTML = `<span class="role system">[SYS]</span><span class="idx">#${String(idx).padStart(3,'0')}</span>`;
+    meta.innerHTML = `<span class="role system">[CTX]</span><span class="idx">#${String(idx).padStart(3,'0')}</span>`;
     wrap.appendChild(meta);
     const body = document.createElement('div');
     body.className = 'msg-body';
-    body.innerHTML = `<div style="font-family:var(--mono); font-size:10px; letter-spacing:0.14em; color:var(--text-faint); text-transform:uppercase;">▸ context-compaction event · earlier turns summarised (${estTok(m.content)} tok)</div>`;
+    const label = m._rolled
+      ? `▸ rolling context · ${m._droppedCount || '?'} older message(s) fell out of window`
+      : `▸ legacy compaction event (${estTok(m.content)} tok)`;
+    body.innerHTML = `<div style="font-family:var(--mono); font-size:10px; letter-spacing:0.14em; color:var(--text-faint); text-transform:uppercase;">${escapeHtml(label)}</div>`;
     wrap.appendChild(body);
     return wrap;
   }
@@ -1843,21 +2052,44 @@ function buildThinkBlock(text, streaming) {
 function renderServers() {
   const list = $('server-list');
   if (!state.servers.length) {
-    list.innerHTML = '<div class="empty-msg">No MCP servers running.<br/>Configure <code style="font-size:9px;background:var(--bg-2);padding:1px 4px;">tools.json</code> in settings → § 5.</div>';
+    list.innerHTML = '<div class="empty-msg">No MCP servers configured.<br/>Edit <code style="font-size:9px;background:var(--bg-2);padding:1px 4px;">tools.json</code> in settings → § 5.</div>';
     return;
   }
   list.innerHTML = state.servers.map(s => {
-    const cls = s.status === 'online' ? 'online' : (s.status === 'starting' ? 'starting' : (s.status === 'error' || s.status === 'crashed' ? 'error' : ''));
+    const enabled = s.enabled !== false;
+    const statusCls = s.status === 'online' ? 'online'
+      : s.status === 'starting' ? 'starting'
+      : (s.status === 'error' || s.status === 'crashed') ? 'error' : '';
+    const cls = `${statusCls} ${enabled ? 'enabled' : 'disabled'}`.trim();
     const tip = (s.error ? 'ERROR: ' + s.error + '\n\n' : '') +
                 'CMD: ' + (s.command || '') + ' ' + (s.args || []).join(' ') +
                 (s.tools?.length ? '\n\nTOOLS:\n  ' + s.tools.join('\n  ') : '') +
-                (s.stderr_tail?.length ? '\n\nSTDERR:\n  ' + s.stderr_tail.join('\n  ') : '');
-    return `<div class="server-row ${cls}" title="${escapeHtml(tip)}">
+                (s.stderr_tail?.length ? '\n\nSTDERR:\n  ' + s.stderr_tail.join('\n  ') : '') +
+                `\n\nClick name to expand · toggle switch to enable/disable.`;
+    const statLabel = !enabled ? 'OFF'
+      : (s.tool_count > 0 ? s.tool_count + ' TOOLS' : (s.status || '').toUpperCase());
+    return `<div class="server-row ${cls}" data-server="${escapeHtml(s.name)}" title="${escapeHtml(tip)}">
+      <div class="switch" data-toggle="${escapeHtml(s.name)}" data-enabled="${enabled ? '1' : '0'}"></div>
       <div class="marker"></div>
       <div class="name">${escapeHtml(s.name)}</div>
-      <div class="count">${s.tool_count > 0 ? s.tool_count + ' TOOLS' : (s.status||'').toUpperCase()}</div>
+      <div class="count">${escapeHtml(statLabel)}</div>
     </div>`;
   }).join('');
+  list.querySelectorAll('[data-toggle]').forEach(el => {
+    el.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const name = el.dataset.toggle;
+      const next = el.dataset.enabled !== '1';
+      try {
+        await apiPost('/api/servers/toggle', { name, enabled: next });
+        showToast(next ? 'MCP ENABLED' : 'MCP DISABLED', name, next ? 'green' : 'amber');
+        setTimeout(refreshServers, 600);
+        setTimeout(refreshServers, 2500);
+      } catch (err) {
+        showToast('TOGGLE FAILED', err.message, 'red');
+      }
+    });
+  });
 }
 
 function renderToolRoster() {
@@ -1897,10 +2129,10 @@ function updateStatus() {
   $('stat-backend').textContent = state.status.backendOk === true ? 'OK' : (state.status.backendOk === false ? 'DOWN' : '—');
   $('stat-network').textContent = c.networkVisible ? 'LAN' : 'LOCAL';
 
-  // footer compaction indicator
+  // footer context-roll indicator
   const cmp = $('foot-cmp');
   cmp.classList.toggle('busy', state.status.compacting);
-  $('foot-cmp-text').textContent = state.status.compacting ? 'COMPACTING…' : 'idle';
+  $('foot-cmp-text').textContent = state.status.compacting ? 'ROLLING…' : 'idle';
 
   // footer network pill
   const netPill = $('foot-net');
@@ -1989,6 +2221,7 @@ function epBase() { return (state.settings.endpoint || '').replace(/\/+$/,''); }
 function epRoot() { return epBase().replace(/\/v1$/,''); }
 
 async function llmFetch(url, opts = {}, opts2 = {}) {
+  // Backend proxy: retries / timeout are handled server-side.
   if (state.settings.useProxy) {
     return fetch('/api/llm/proxy', {
       method: 'POST',
@@ -1998,16 +2231,46 @@ async function llmFetch(url, opts = {}, opts2 = {}) {
         headers: { ...(opts.headers || {}), ...authHeaders() },
         body: opts.body ? JSON.parse(opts.body) : {},
         stream: !!opts2.stream,
+        timeout: opts2.timeout || 600,
+        retries: opts2.retries || 3,
       }),
       signal: opts.signal,
     });
   }
-  return fetch(url, {
-    method: opts.method || 'POST',
-    headers: { 'Content-Type': 'application/json', ...(opts.headers || {}), ...authHeaders() },
-    body: opts.body,
-    signal: opts.signal,
-  });
+  // Direct: retry on transient failures (network / timeout / 5xx).
+  const maxRetries = opts2.retries || 3;
+  const tmoMs = (opts2.timeout || 600) * 1000;
+  let backoff = 1000;
+  let lastErr = null;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    // chain user signal + our timeout signal
+    const tmo = new AbortController();
+    const tmId = setTimeout(() => tmo.abort(), tmoMs);
+    const signal = opts.signal
+      ? new AbortController() && (() => { const c = new AbortController(); opts.signal.addEventListener('abort', () => c.abort(), { once: true }); tmo.signal.addEventListener('abort', () => c.abort(), { once: true }); return c.signal; })()
+      : tmo.signal;
+    try {
+      const r = await fetch(url, {
+        method: opts.method || 'POST',
+        headers: { 'Content-Type': 'application/json', ...(opts.headers || {}), ...authHeaders() },
+        body: opts.body,
+        signal,
+      });
+      clearTimeout(tmId);
+      if (r.ok || (r.status >= 400 && r.status < 500)) return r;
+      // 5xx → retry
+      lastErr = new Error(`HTTP ${r.status}`);
+    } catch (e) {
+      clearTimeout(tmId);
+      if (e.name === 'AbortError' && opts.signal && opts.signal.aborted) throw e;
+      lastErr = e;
+    }
+    if (attempt < maxRetries - 1) {
+      await new Promise(res => setTimeout(res, backoff));
+      backoff = Math.min(backoff * 2, 8000);
+    }
+  }
+  throw lastErr || new Error('llmFetch failed');
 }
 
 async function testConnection() {
@@ -2124,76 +2387,129 @@ async function fetchTemplate() {
   else { out.className = 'test-result err'; out.textContent = '▸ endpoint does not expose a chat template or default system prompt.'; }
 }
 
-/* ───────────────── Compaction (background; status-bar only) ───────────────── */
-async function maybeCompact() {
-  const used = totalTokens();
-  const limit = state.settings.context * (state.settings.threshold / 100);
-  if (used < limit || state.messages.length < 6) return false;
+/* ───────────────── Rolling context window ─────────────────
+   Replaces the older summarisation-based "compaction". When token usage
+   crosses the configured threshold, drop the OLDEST middle messages until
+   we fall back below the limit. Always preserve:
+     • the first user message (the original task) so continuity is kept
+     • the most-recent N messages (current actions in flight)
+   Tool-call / tool-result pairs are removed together so the trace stays
+   coherent (no orphaned tool_call_ids). The system prompt is set outside
+   the message buffer (in buildOutgoing) and is never affected.
+*/
+function _toolCallIds(m) {
+  if (!Array.isArray(m.tool_calls)) return [];
+  return m.tool_calls.map(tc => tc.id).filter(Boolean);
+}
+function rollContext({ force = false } = {}) {
+  const c = state.settings;
+  const limit = Math.max(1, c.context * (c.threshold / 100));
+  const msgs = state.messages;
+  if (msgs.length < 4) return false;
+  if (!force && totalTokens() < limit) return false;
   if (state.status.compacting) return false;
+
   state.status.compacting = true; updateStatus();
 
-  const msgs = state.messages;
-  const tail = Math.max(4, Math.ceil(msgs.length * 0.30));
-  const head = Math.max(2, Math.floor(msgs.length * 0.10));
-  let keepEnd = msgs.slice(msgs.length - tail);
-  while (keepEnd.length && keepEnd[0].role === 'tool') keepEnd.shift();
-  const keepStart = msgs.slice(0, head);
-  const middle = msgs.slice(head, msgs.length - keepEnd.length);
+  // identify anchors:
+  //   - the FIRST user message (to keep the original task intact)
+  //   - the last KEEP_TAIL messages (current actions)
+  const KEEP_TAIL = Math.max(4, Math.min(12, Math.floor(msgs.length * 0.25)));
+  let firstUserIdx = msgs.findIndex(m => m.role === 'user');
+  if (firstUserIdx < 0) firstUserIdx = 0;
 
-  let summary;
-  try { summary = await summarizeViaModel(middle); }
-  catch { summary = localSummary(middle); }
+  const tailStart = Math.max(firstUserIdx + 1, msgs.length - KEEP_TAIL);
+  // collect indices we are allowed to drop, OLDEST FIRST
+  const droppable = [];
+  for (let i = firstUserIdx + 1; i < tailStart; i++) droppable.push(i);
 
-  const compacted = {
+  // group tool_call → tool_result pairs together so they drop atomically
+  const groups = [];
+  let i = 0;
+  while (i < droppable.length) {
+    const idx = droppable[i];
+    const m = msgs[idx];
+    const ids = _toolCallIds(m);
+    if (ids.length) {
+      const grp = [idx];
+      // follow up: consume immediately-following tool results matching these ids
+      let j = i + 1;
+      while (j < droppable.length) {
+        const next = msgs[droppable[j]];
+        if (next.role === 'tool' && (!next.tool_call_id || ids.includes(next.tool_call_id))) {
+          grp.push(droppable[j]); j++;
+        } else break;
+      }
+      groups.push(grp);
+      i = j;
+    } else {
+      groups.push([idx]);
+      i++;
+    }
+  }
+
+  const drop = new Set();
+  let dropped = 0;
+  for (const grp of groups) {
+    if (totalTokens() < limit && !force) break;
+    grp.forEach(k => drop.add(k));
+    // also drop any orphan tool results elsewhere referencing our ids
+    const ids = new Set();
+    for (const k of grp) for (const id of _toolCallIds(msgs[k])) ids.add(id);
+    if (ids.size) {
+      for (let k = 0; k < msgs.length; k++) {
+        if (drop.has(k)) continue;
+        const mm = msgs[k];
+        if (mm.role === 'tool' && mm.tool_call_id && ids.has(mm.tool_call_id)) drop.add(k);
+      }
+    }
+    dropped += grp.length;
+    // quick re-estimate
+    const trimmed = msgs.filter((_, k) => !drop.has(k));
+    const prev = state.messages;
+    state.messages = trimmed;
+    const newUsed = totalTokens();
+    state.messages = prev; // restore until commit
+    if (newUsed < limit && !force) break;
+  }
+
+  if (!drop.size) {
+    state.status.compacting = false; updateStatus();
+    return false;
+  }
+
+  // Final coherence pass: if any kept `tool` message references a tool_call_id
+  // that was dropped, drop it too (avoid orphan tool results).
+  const keptCallIds = new Set();
+  msgs.forEach((mm, k) => {
+    if (drop.has(k)) return;
+    for (const id of _toolCallIds(mm)) keptCallIds.add(id);
+  });
+  msgs.forEach((mm, k) => {
+    if (drop.has(k)) return;
+    if (mm.role === 'tool' && mm.tool_call_id && !keptCallIds.has(mm.tool_call_id)) {
+      drop.add(k);
+    }
+  });
+
+  const kept = msgs.filter((_, k) => !drop.has(k));
+  // leave a small marker so users see something happened (rendered compactly)
+  const marker = {
     role: 'system',
-    content: '◢ COMPACTED CONVERSATION SEGMENT\n' +
-             `Original ${middle.length} message(s) condensed (≈${middle.reduce((a,m)=>a+msgTokens(m),0)} tok → ≈${estTok(summary)} tok).\n\n` + summary,
     _ts: Date.now(),
-    _compaction: true,
+    _rolled: true,
+    _droppedCount: dropped,
+    content: `◢ CONTEXT ROLL · ${dropped} older message(s) fell out of the window`,
   };
-  state.messages = [...keepStart, compacted, ...keepEnd];
+  // insert the marker just after the first user message (or at start)
+  const insertAt = firstUserIdx + 1;
+  state.messages = [...kept.slice(0, insertAt), marker, ...kept.slice(insertAt)];
+
   state.status.compactions++;
   state.status.compacting = false;
   queuePersist();
   renderMessages(); updateStatus();
   return true;
-}
-
-function localSummary(middle) {
-  const lines = [];
-  for (const m of middle) {
-    if (m.role === 'user') lines.push(`USER: ${(m.content || '').slice(0, 240)}`);
-    else if (m.role === 'assistant') {
-      if (m.content) lines.push(`ASSISTANT: ${(m.content || '').slice(0, 280)}`);
-      if (Array.isArray(m.tool_calls)) for (const tc of m.tool_calls) lines.push(`  ▸ tool ${tc.function?.name}(${(tc.function?.arguments || '').slice(0, 80)})`);
-    }
-    else if (m.role === 'tool') lines.push(`  ◂ result(${m.name}): ${(m.content || '').slice(0, 160)}`);
-  }
-  return lines.join('\n');
-}
-
-async function summarizeViaModel(middle) {
-  const c = state.settings;
-  if (!c.endpoint || !c.model) throw new Error('no model');
-  const transcript = localSummary(middle);
-  const body = {
-    model: c.model,
-    messages: [
-      { role: 'system', content: 'You compress conversation history. Output a dense, faithful summary in under 600 tokens. Preserve user goals, decisions, open questions, tool results, important facts. Do not invent.' },
-      { role: 'user', content: 'Summarize this transcript:\n\n' + transcript },
-    ],
-    temperature: 0.2,
-    max_tokens: 800,
-    stream: false,
-  };
-  const r = await llmFetch(epBase() + '/chat/completions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (!r.ok) throw new Error('compact http ' + r.status);
-  const j = await r.json();
-  return j.choices?.[0]?.message?.content || localSummary(middle);
 }
 
 /* ───────────────── Chat ───────────────── */
@@ -2202,6 +2518,8 @@ function buildOutgoing() {
   const messages = [];
   if (c.systemPrompt && c.systemPrompt.trim()) messages.push({ role: 'system', content: c.systemPrompt });
   for (const m of state.messages) {
+    // Skip UI-only "roll" markers — they are decoration, not part of the LLM transcript.
+    if (m._rolled || m._compaction) continue;
     const o = { role: m.role };
     if (m.content !== undefined) o.content = m.content;
     if (m.tool_calls) o.tool_calls = m.tool_calls;
@@ -2262,7 +2580,11 @@ async function runTurn(depth = 0) {
     queuePersist();
     renderMessages(); return;
   }
-  await maybeCompact();
+  // Roll older context off the front before every model call so we stay under
+  // the configured threshold. This also means each recursive tool round gets
+  // a fresh `max_tokens` budget (set by buildOutgoing), so tool calls are NOT
+  // counted against the output-token cap — only `maxToolRecursion` caps depth.
+  rollContext();
   const body = buildOutgoing();
   const ai = { role: 'assistant', content: '', reasoning: '', tool_calls: [], _ts: Date.now(), _streaming: true };
   state.messages.push(ai); renderMessages();
@@ -2525,31 +2847,55 @@ function attachWiring() {
   });
 
   $('btn-new-chat').addEventListener('click', () => createChat(''));
-  $('btn-new-conv').addEventListener('click', () => createChat(''));
 
-  $('btn-export').addEventListener('click', () => {
-    const active = state.chats.find(x => x.id === state.activeChatId);
-    const blob = new Blob([JSON.stringify({ settings: { ...state.settings, apiKey: '[redacted]' }, chat: active, messages: state.messages }, null, 2)], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `chatsgi-transcript-${Date.now()}.json`;
-    a.click(); URL.revokeObjectURL(a.href);
+  // Consolidated CHAT menu (left side, under the section head)
+  const chatMenuBtn = $('btn-chat-menu');
+  const chatMenuPop = $('chat-menu-pop');
+  chatMenuBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const open = chatMenuPop.classList.toggle('open');
+    chatMenuBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
   });
-  $('btn-copy-chat').addEventListener('click', async () => {
-    const txt = state.messages.map(m => `[${(m.role||'?').toUpperCase()}] ${m.content || ''}`).join('\n\n');
-    try { await navigator.clipboard.writeText(txt); showToast('COPIED', `${state.messages.length} message(s)`, 'green'); }
-    catch { showToast('COPY FAILED', 'clipboard denied', 'red'); }
+  chatMenuPop.querySelectorAll('button[data-act]').forEach(b => {
+    b.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      chatMenuPop.classList.remove('open');
+      chatMenuBtn.setAttribute('aria-expanded', 'false');
+      const act = b.dataset.act;
+      if (act === 'new') return createChat('');
+      if (!state.activeChatId) { showToast('NO ACTIVE CHAT', 'Create one first.', 'amber'); return; }
+      await chatAction(state.activeChatId, act);
+    });
   });
-  $('btn-compact-now').addEventListener('click', async () => {
+
+  $('btn-open-settings').addEventListener('click', openDrawer);
+
+  $('btn-roll-now').addEventListener('click', () => {
     if (state.messages.length < 4) { showToast('SKIPPED', 'Not enough turns.', 'amber'); return; }
-    const prev = state.settings.threshold; state.settings.threshold = 0;
-    await maybeCompact();
-    state.settings.threshold = prev; updateStatus();
+    const did = rollContext({ force: true });
+    showToast(did ? 'CONTEXT ROLLED' : 'NOTHING TO ROLL',
+              did ? `${state.status.compactions} total` : 'window already small enough',
+              did ? 'cyan' : 'amber');
   });
   $('btn-restart-mcp').addEventListener('click', async () => {
     try { await apiPost('/api/servers/reload', {}); showToast('MCP', 'Servers restarting…', 'amber'); setTimeout(refreshServers, 1500); setTimeout(refreshServers, 4000); }
     catch (e) { showToast('MCP FAIL', e.message, 'red'); }
   });
+
+  // Left / right sidebar toggles
+  const toggleSide = (which) => {
+    const app = document.querySelector('.app');
+    const cls = which + '-collapsed';
+    app.classList.toggle(cls);
+    const collapsed = app.classList.contains(cls);
+    if (which === 'left')  state.settings.leftCollapsed = collapsed;
+    if (which === 'right') state.settings.rightCollapsed = collapsed;
+    updateToggleIcons();
+    // persist asynchronously (don't block UI)
+    apiPost('/api/config', { [which === 'left' ? 'leftCollapsed' : 'rightCollapsed']: collapsed }).catch(()=>{});
+  };
+  $('toggle-left').addEventListener('click', () => toggleSide('left'));
+  $('toggle-right').addEventListener('click', () => toggleSide('right'));
 
   const ta = $('input');
   ta.addEventListener('input', () => autoresize(ta));
@@ -2570,7 +2916,25 @@ function attachWiring() {
       document.querySelectorAll('.chat-pop.open').forEach(p => p.classList.remove('open'));
       state.popoverChatId = null;
     }
+    if (!e.target.closest('#chat-menu-pop, #btn-chat-menu')) {
+      const cm = $('chat-menu-pop'); if (cm) cm.classList.remove('open');
+      const cb = $('btn-chat-menu'); if (cb) cb.setAttribute('aria-expanded', 'false');
+    }
   });
+}
+
+function updateToggleIcons() {
+  const app = document.querySelector('.app');
+  const lt = $('toggle-left'); const rt = $('toggle-right');
+  if (lt) lt.textContent = app.classList.contains('left-collapsed')  ? '▶' : '◀';
+  if (rt) rt.textContent = app.classList.contains('right-collapsed') ? '◀' : '▶';
+}
+
+function applySideCollapsedFromSettings() {
+  const app = document.querySelector('.app');
+  app.classList.toggle('left-collapsed',  !!state.settings.leftCollapsed);
+  app.classList.toggle('right-collapsed', !!state.settings.rightCollapsed);
+  updateToggleIcons();
 }
 
 /* Clock */
@@ -2589,6 +2953,7 @@ setInterval(refreshServers, 8000);
   await refreshServers();
   applyToForm();
   attachWiring();
+  applySideCollapsedFromSettings();
   renderChatList();
   renderMessages();
   updateStatus();
