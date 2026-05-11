@@ -115,12 +115,24 @@ Standard MCP config — same shape Claude Desktop uses. Each entry under
 `mcpServers` is keyed by display name and specifies the executable to launch.
 Each server must be on `PATH` and speak MCP over stdio.
 
-## ◢ Aesthetic
+## ◢ Aesthetic — rev. 3.0 BIOLAB
 
-Cool teal/cyan HUD palette, Share Tech Mono + Chakra Petch, slow rotating
-target reticle, subtle scanlines and roaming sweep line. Visual debt to the
-*Ghost in the Shell: Stand Alone Complex* (2002) tachikoma diagnostic
-displays and Section 9 mission HUDs — dense, labelled, instrumental.
+Phosphor-green CRT palette with magenta instrument accents. Bracketed
+"specimen card" frames, dithered backplate, animated radar reticle with a
+sweeping magenta wedge. Dynamic readouts wired live to the session:
+
+- **SPECIMEN CARD** (right panel) — the active chat surfaced as a lab
+  specimen with TYPE, SIZE, CONDITION, SIGNAL, RARITY, TOKENS. Condition
+  inverts capacity utilisation; rarity escalates with conversation depth.
+  An 18-cell capacity bar lights green → amber → critical as the rolling
+  context fills.
+- **VITALITY** strip — per-message token bars, colour-coded by role
+  (amber=user, green=assistant, magenta=tool). Streaming bars pulse.
+- **CARGO HOLD** — every loaded MCP tool rendered as a pixel cell with a
+  deterministic glyph; hover reveals its server / description.
+
+Visual debt to *Ghost in the Shell: SAC* Section 9 HUDs and bio-industrial
+trading-terminal UIs — dense, labelled, instrumental.
 
 ```
 A stand-alone complex is a phenomenon by which unrelated copycats are mistakenly
